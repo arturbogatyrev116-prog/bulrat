@@ -12,3 +12,4 @@ pytest
 pytest-asyncio
 python-docx
 firecrawl-anydoc>=0.1.6
+httpx

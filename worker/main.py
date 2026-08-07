@@ -164,10 +164,16 @@ async def process_claimed_task(client: CoordinatorClient, task: dict[str, Any], 
             pass
 
 
-async def _heartbeat_loop(client: CoordinatorClient, config: dict[str, Any], active_tasks: list[int], shutdown: asyncio.Event) -> None:
+async def _heartbeat_loop(
+    client: CoordinatorClient,
+    config: dict[str, Any],
+    active_tasks: set[asyncio.Task[None]],
+    shutdown: asyncio.Event,
+) -> None:
+    """Report the current number of running tasks every configured interval."""
     while not shutdown.is_set():
         try:
-            await client.heartbeat(get_health(active_tasks[0]), config)
+            await client.heartbeat(get_health(len(active_tasks)), config)
         except Exception:
             log.exception("Heartbeat failed")
         try:
@@ -176,34 +182,68 @@ async def _heartbeat_loop(client: CoordinatorClient, config: dict[str, Any], act
             pass
 
 
+async def _process_with_slot(
+    client: CoordinatorClient,
+    task: dict[str, Any],
+    config: dict[str, Any],
+    semaphore: asyncio.Semaphore,
+) -> None:
+    """Process one already-claimed task and always release its capacity slot."""
+    try:
+        await process_claimed_task(client, task, config)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("Unexpected worker error for task %s", task.get("task_id"))
+    finally:
+        semaphore.release()
+
+
 async def run_worker(config: dict[str, Any], shutdown: asyncio.Event | None = None) -> None:
+    """Claim and process tasks up to ``max_parallel`` until shutdown."""
     shutdown = shutdown or asyncio.Event()
     client = CoordinatorClient(config)
-    active_tasks = [0]
-    heartbeat = asyncio.create_task(_heartbeat_loop(client, config, active_tasks, shutdown))
+    max_parallel = max(1, int(config.get("max_parallel", 1)))
+    semaphore = asyncio.Semaphore(max_parallel)
+    active_tasks: set[asyncio.Task[None]] = set()
+    heartbeat = asyncio.create_task(_heartbeat_loop(client, config, active_tasks, shutdown), name="heartbeat")
+
     try:
         while not shutdown.is_set():
+            if len(active_tasks) >= max_parallel:
+                # Keep the event loop responsive to SIGINT/SIGTERM while all
+                # slots are busy; finished tasks remove themselves via callback.
+                await asyncio.sleep(0.2)
+                continue
             if not can_claim_task():
                 await asyncio.sleep(float(config.get("claim_interval_seconds", 5)))
                 continue
-            task = await client.claim()
-            if task is None:
+
+            await semaphore.acquire()
+            try:
+                task = await client.claim()
+            except Exception:
+                semaphore.release()
+                log.exception("Task claim failed")
                 await asyncio.sleep(float(config.get("claim_interval_seconds", 5)))
                 continue
-            active_tasks[0] = 1
-            processing = asyncio.create_task(process_claimed_task(client, task, config))
-            stopper = asyncio.create_task(shutdown.wait())
-            done, _pending = await asyncio.wait({processing, stopper}, return_when=asyncio.FIRST_COMPLETED)
-            if stopper in done and not processing.done():
-                processing.cancel()
-            stopper.cancel()
-            try:
-                await processing
-            except asyncio.CancelledError:
-                log.info("Current task was stopped for graceful shutdown")
-            active_tasks[0] = 0
+            if task is None:
+                semaphore.release()
+                await asyncio.sleep(float(config.get("claim_interval_seconds", 5)))
+                continue
+
+            processing = asyncio.create_task(
+                _process_with_slot(client, task, config, semaphore),
+                name=f"task-{task['task_id']}",
+            )
+            active_tasks.add(processing)
+            processing.add_done_callback(active_tasks.discard)
     finally:
         shutdown.set()
+        for task in list(active_tasks):
+            task.cancel()
+        if active_tasks:
+            await asyncio.gather(*active_tasks, return_exceptions=True)
         heartbeat.cancel()
         try:
             await heartbeat

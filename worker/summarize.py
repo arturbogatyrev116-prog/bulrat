@@ -1,20 +1,25 @@
-"""Ollama summarization and robust parsing of its requested JSON response."""
+"""Ollama summarization via HTTPX with JSON result normalization."""
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
-import aiohttp
+import httpx
 
 
 def _prompt_path(task_type: str, config: dict[str, Any]) -> Path:
-    prompt_map = config.get("prompt_map", {})
-    filename = prompt_map.get(task_type, "generic.md")
     directory = Path(config.get("prompts_dir", "config/prompts"))
-    return directory / filename
+    direct = directory / f"{task_type}.md"
+    if direct.is_file():
+        return direct
+    filename = config.get("prompt_map", {}).get(task_type, "generic.md")
+    configured = directory / filename
+    if configured.is_file():
+        return configured
+    raise FileNotFoundError(f"No prompt found for task type {task_type!r} in {directory}")
 
 
 def build_prompt(text: str, task_type: str, config: dict[str, Any]) -> str:
@@ -39,28 +44,50 @@ def _parse_response(response: str) -> dict[str, Any]:
     return parsed
 
 
+def _normalize_result(parsed: dict[str, Any]) -> dict[str, Any]:
+    summary = parsed.get("summary", {})
+    if isinstance(summary, str):
+        summary = {"brief": summary, "ideas": [], "actions": []}
+    if not isinstance(summary, dict):
+        summary = {"brief": "", "ideas": [], "actions": []}
+    summary.setdefault("brief", "")
+    summary.setdefault("ideas", [])
+    summary.setdefault("actions", [])
+
+    result: dict[str, Any] = {
+        "title": str(parsed.get("title") or "Untitled"),
+        "summary": summary,
+        "tags": [str(tag) for tag in parsed.get("tags", []) if isinstance(tag, (str, int, float))],
+        "metadata": parsed.get("metadata") if isinstance(parsed.get("metadata"), dict) else {},
+    }
+    if isinstance(parsed.get("chapters"), list):
+        result["chapters"] = parsed["chapters"]
+    return result
+
+
 async def summarize(text: str, task_type: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Send a prompt to the configured Ollama endpoint and return note fields."""
     if not text.strip():
         raise ValueError("Cannot summarize empty text")
     llm = config.get("llm", {})
     endpoint = str(llm.get("base_url", "http://localhost:11434")).rstrip("/") + "/api/generate"
     prompt = build_prompt(text, task_type, config)
-    models = [llm.get("model", "qwen2.5:7b")]
-    if llm.get("fallback_model") and llm["fallback_model"] != models[0]:
-        models.append(llm["fallback_model"])
-    timeout = aiohttp.ClientTimeout(total=30)
+    models = [str(llm.get("model", "qwen2.5:7b"))]
+    fallback = llm.get("fallback_model")
+    if fallback and fallback != models[0]:
+        models.append(str(fallback))
+
     last_error: Exception | None = None
-    for model in models:
-        body = {"model": model, "prompt": prompt, "stream": False}
-        for attempt in range(3):
-            try:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.post(endpoint, json=body) as response:
-                        response.raise_for_status()
-                        data = await response.json()
-                return _parse_response(str(data.get("response", "")))
-            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
-                last_error = exc
-                if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+        for model in models:
+            body = {"model": model, "prompt": prompt, "stream": False}
+            for attempt in range(3):
+                try:
+                    response = await client.post(endpoint, json=body)
+                    response.raise_for_status()
+                    return _normalize_result(_parse_response(str(response.json().get("response", ""))))
+                except (httpx.HTTPError, ValueError) as exc:
+                    last_error = exc
+                    if attempt < 2:
+                        await asyncio.sleep(2 ** attempt)
     raise RuntimeError("Ollama summarization failed after retries") from last_error
