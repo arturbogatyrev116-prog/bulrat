@@ -6,7 +6,7 @@
 - Пиши кратко и по делу, без воды
 - Сохраняй важные детали, цифры, имена, термины
 - Используй активный залог
-- Язык вывода: тот же, что у транскрипта (ru/en)
+- CRITICAL: Respond ONLY in English if the transcript is in English. Respond ONLY in Russian if the transcript is in Russian. Do NOT mix languages. Do NOT use Chinese under any circumstances.
 
 **Структура вывода (строго JSON):**
 ```json

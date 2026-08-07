@@ -65,20 +65,27 @@ def _normalize_result(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+_MAX_TRANSCRIPT_CHARS = 12_000
+
+
 async def summarize(text: str, task_type: str, config: dict[str, Any]) -> dict[str, Any]:
     """Send a prompt to the configured Ollama endpoint and return note fields."""
     if not text.strip():
         raise ValueError("Cannot summarize empty text")
+    # Trim transcript to avoid exceeding context window
+    trimmed = text[:_MAX_TRANSCRIPT_CHARS] + ("…" if len(text) > _MAX_TRANSCRIPT_CHARS else "")
     llm = config.get("llm", {})
     endpoint = str(llm.get("base_url", "http://localhost:11434")).rstrip("/") + "/api/generate"
-    prompt = build_prompt(text, task_type, config)
+    timeout_s = float(llm.get("timeout_seconds", 300))
+    prompt = build_prompt(trimmed, task_type, config)
     models = [str(llm.get("model", "qwen2.5:7b"))]
     fallback = llm.get("fallback_model")
     if fallback and fallback != models[0]:
         models.append(str(fallback))
 
     last_error: Exception | None = None
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+    # trust_env=False prevents system HTTP proxies from intercepting localhost requests
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_s), trust_env=False) as client:
         for model in models:
             body = {"model": model, "prompt": prompt, "stream": False}
             for attempt in range(3):

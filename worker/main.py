@@ -120,11 +120,17 @@ async def _content_for_task(task: dict[str, Any], config: dict[str, Any]) -> tup
             return subtitles, subtitles, "subtitles"
         # Use pre-downloaded file if available, otherwise download directly
         has_ref = payload.get("file_path") or payload.get("audio_file") or triage.get("file_path") or triage.get("audio_file")
+        url = payload.get("url", "")
         if has_ref:
-            await _wait_for_file(task, config)
-            audio_path = get_local_path(task, config["media_staging_path"])
+            try:
+                await _wait_for_file(task, config)
+                audio_path = get_local_path(task, config["media_staging_path"])
+            except FileNotFoundError:
+                # Pre-staged file not synced yet (Syncthing not set up) — download directly
+                if not url:
+                    raise
+                audio_path = await _download_yt_audio(url, config["media_staging_path"])
         else:
-            url = payload.get("url", "")
             if not url:
                 raise ValueError("YouTube task has no URL and no pre-downloaded audio")
             audio_path = await _download_yt_audio(url, config["media_staging_path"])
