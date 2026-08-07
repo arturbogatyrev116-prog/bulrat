@@ -346,8 +346,8 @@ def dashboard(request: Request, key: str = Query("")):
         raise HTTPException(status_code=401, detail="Invalid key")
     tasks, total = list_tasks(limit=100)
     worker_list = get_all_workers()
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    # Starlette 1.x: request is first positional arg
+    return templates.TemplateResponse(request, "dashboard.html", {
         "tasks": tasks,
         "workers": worker_list,
         "total": total,
