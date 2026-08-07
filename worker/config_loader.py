@@ -59,14 +59,22 @@ def _merge(defaults: dict[str, Any], supplied: dict[str, Any]) -> dict[str, Any]
 def load_config(path: str | Path) -> dict[str, Any]:
     """Read YAML config and return normalized worker settings.
 
-    Relative paths are resolved from the configuration file, so launching the
-    worker from a service manager does not change where media is looked up.
+    Also auto-loads a sibling *.local.yaml if present — local overrides
+    contain real IPs/keys and are gitignored.
     """
     config_path = Path(path).expanduser().resolve()
     with config_path.open("r", encoding="utf-8") as stream:
         raw = yaml.safe_load(stream) or {}
     if not isinstance(raw, dict):
         raise ValueError("Worker configuration must be a YAML mapping")
+
+    # Auto-merge *.local.yaml override (gitignored, contains real secrets)
+    local_path = config_path.with_suffix("").with_suffix(".local.yaml")
+    if local_path.exists():
+        with local_path.open("r", encoding="utf-8") as f:
+            local_overrides = yaml.safe_load(f) or {}
+        if isinstance(local_overrides, dict):
+            raw = _merge(raw, local_overrides)
 
     config = _merge(DEFAULTS, raw)
     for required in ("worker_id", "coordinator_url", "api_key"):

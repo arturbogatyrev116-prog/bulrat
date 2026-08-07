@@ -3,8 +3,8 @@
 ##
 
 worker_id: desktop
-coordinator_url: "http://100.x.x.x:8080"    # Tailscale IP VPS
-api_key: "change-me-secret"
+coordinator_url: "http://VPS_IP:8080"
+api_key: "YOUR_API_KEY"
 
 media_staging_path: "C:/Games/bulart/media_staging"
 

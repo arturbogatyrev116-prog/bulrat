@@ -17,6 +17,10 @@ media_staging/
 # Vault — отдельный git-репо, не включать в code-репо
 Vault/
 
+# Local config overrides — содержат реальные IP/ключи, никогда не в git
+*.local.yaml
+config/local/
+
 # Logs
 *.log
 logs/
