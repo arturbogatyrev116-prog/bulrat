@@ -1,4 +1,5 @@
 faster-whisper
+yt-dlp
 aiohttp
 psutil
 PyYAML

@@ -60,6 +60,38 @@ async def _wait_for_file(task: dict[str, Any], config: dict[str, Any]) -> None:
         await asyncio.sleep(float(config.get("syncthing_wait_poll_seconds", 5)))
 
 
+async def _download_yt_audio(url: str, media_dir: str) -> Path:
+    """Download YouTube audio directly on worker as fallback when no pre-staged file exists."""
+    import hashlib
+    try:
+        import yt_dlp
+    except ImportError:
+        raise RuntimeError("yt_dlp not installed; cannot download YouTube audio")
+    inbox = Path(media_dir) / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+    mp3_path = inbox / f"yt_{url_hash}.mp3"
+    if mp3_path.exists():
+        return mp3_path
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "format": "bestaudio/best",
+        "outtmpl": str(inbox / f"yt_{url_hash}.%(ext)s"),
+        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "64"}],
+        "socket_timeout": 60,
+    }
+    loop = asyncio.get_event_loop()
+    def _dl():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        return mp3_path if mp3_path.exists() else None
+    result = await loop.run_in_executor(None, _dl)
+    if not result:
+        raise RuntimeError(f"yt_dlp produced no output file for {url}")
+    return result
+
+
 def _task_text(task: dict[str, Any]) -> str:
     payload = task.get("payload", {})
     triage = task.get("triage_data", {}) or {}
@@ -86,8 +118,17 @@ async def _content_for_task(task: dict[str, Any], config: dict[str, Any]) -> tup
         subtitles = _subtitle_text(task)
         if subtitles:
             return subtitles, subtitles, "subtitles"
-        await _wait_for_file(task, config)
-        transcript = await process_media(task, config["media_staging_path"], config["transcription"])
+        # Use pre-downloaded file if available, otherwise download directly
+        has_ref = payload.get("file_path") or payload.get("audio_file") or triage.get("file_path") or triage.get("audio_file")
+        if has_ref:
+            await _wait_for_file(task, config)
+            audio_path = get_local_path(task, config["media_staging_path"])
+        else:
+            url = payload.get("url", "")
+            if not url:
+                raise ValueError("YouTube task has no URL and no pre-downloaded audio")
+            audio_path = await _download_yt_audio(url, config["media_staging_path"])
+        transcript = await process_media({"payload": {"file_path": str(audio_path)}}, config["media_staging_path"], config["transcription"])
         return transcript, transcript, f"whisper:{select_model_name(config['transcription'])}"
     if task_type in {"article", "twitter", "reddit", "text"}:
         text = _task_text(task)
