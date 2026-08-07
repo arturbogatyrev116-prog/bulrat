@@ -8,7 +8,7 @@ from ..triage import triage_youtube, YOUTUBE_DOMAINS
 
 log = logging.getLogger(__name__)
 
-MEDIA_STAGING = Path(os.environ.get("MEDIA_STAGING", "../media_staging"))
+MEDIA_STAGING = Path(os.environ.get("MEDIA_STAGING", "media_staging"))
 
 
 class YouTubeIngestion(BaseIngestion):
@@ -25,7 +25,7 @@ class YouTubeIngestion(BaseIngestion):
             try:
                 audio_path = await self._download_audio(url, triage_data.get("title", ""))
                 if audio_path:
-                    triage_data["file_path"] = str(audio_path.relative_to(MEDIA_STAGING.parent))
+                    triage_data["file_path"] = str(audio_path.relative_to(MEDIA_STAGING)).replace("\\", "/")
             except Exception as e:
                 log.error("Audio download failed for %s: %s", url, e)
 

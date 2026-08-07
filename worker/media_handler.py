@@ -19,7 +19,11 @@ def is_video(file_path: str | Path) -> bool:
 def get_local_path(task: dict[str, Any], media_dir: str | Path) -> Path:
     """Resolve a task media reference and reject paths outside media staging."""
     payload = task.get("payload", task)
-    reference = payload.get("file_path") or payload.get("audio_file") or payload.get("pdf_file")
+    triage = task.get("triage_data", {}) or {}
+    reference = (
+        payload.get("file_path") or payload.get("audio_file") or payload.get("pdf_file")
+        or triage.get("file_path") or triage.get("audio_file")
+    )
     if not reference:
         raise ValueError("Task payload does not contain a media file path")
     root = Path(media_dir).resolve()

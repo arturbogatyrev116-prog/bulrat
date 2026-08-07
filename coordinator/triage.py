@@ -81,7 +81,7 @@ async def triage_youtube(url: str) -> tuple[dict, list[str]]:
         sub_text = None
         for lang_priority in ["ru", "ru-RU", "en"]:
             if lang_priority in subs or lang_priority in auto_subs:
-                sub_text = _extract_subtitle_text(
+                sub_text = await _download_subtitle_text(
                     subs.get(lang_priority) or auto_subs.get(lang_priority)
                 )
                 if sub_text:
@@ -106,15 +106,60 @@ async def triage_youtube(url: str) -> tuple[dict, list[str]]:
     return triage_data, required
 
 
-def _extract_subtitle_text(sub_formats: list | None) -> str | None:
+async def _download_subtitle_text(sub_formats: list | None) -> str | None:
+    """Download subtitle content and return plain text."""
     if not sub_formats:
         return None
-    # Prefer json3 or vtt format with actual text
-    for fmt in sub_formats:
-        if fmt.get("ext") in ("json3", "srv3", "vtt", "ttml"):
-            # In actual usage, yt_dlp would need to download; here we check availability
-            return None  # Text available only after download
+    try:
+        import httpx
+    except ImportError:
+        return None
+
+    for ext_try in ("json3", "srv3", "vtt", "srv1", "ttml"):
+        for fmt in sub_formats:
+            if fmt.get("ext") != ext_try or not fmt.get("url"):
+                continue
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.get(fmt["url"])
+                    resp.raise_for_status()
+                content = resp.text
+                if ext_try == "json3":
+                    text = _parse_json3_text(content)
+                else:
+                    text = _parse_vtt_text(content)
+                if text and len(text.strip()) > 80:
+                    return text.strip()
+            except Exception as e:
+                log.debug("Subtitle download failed (%s): %s", ext_try, e)
     return None
+
+
+def _parse_json3_text(content: str) -> str:
+    import json as _json
+    try:
+        data = _json.loads(content)
+        parts = []
+        for event in data.get("events", []):
+            text = "".join(s.get("utf8", "") for s in event.get("segs", [])).strip()
+            if text and text != "\n":
+                parts.append(text)
+        return " ".join(parts)
+    except Exception:
+        return ""
+
+
+def _parse_vtt_text(content: str) -> str:
+    lines, result, prev = content.split("\n"), [], ""
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("WEBVTT") or line.startswith("NOTE") or "-->" in line:
+            continue
+        clean = re.sub(r"<[^>]+>", "", line).strip()
+        if clean and clean != prev:
+            result.append(clean)
+            prev = clean
+    return " ".join(result)
 
 
 async def triage_article(url: str) -> tuple[dict, list[str]]:
