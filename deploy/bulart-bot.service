@@ -1,0 +1,13 @@
+[Unit]
+Description=Bulart Telegram Bot
+After=network.target bulart-coordinator.service
+
+[Service]
+WorkingDirectory=/opt/bulart
+EnvironmentFile=/opt/bulart/.env
+ExecStart=/opt/bulart/.venv/bin/python -m bot.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
