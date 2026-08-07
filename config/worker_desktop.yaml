@@ -1,0 +1,44 @@
+##
+## Worker config — Desktop (приоритетный)
+##
+
+worker_id: desktop
+coordinator_url: "http://100.x.x.x:8080"    # Tailscale IP VPS
+api_key: "change-me-secret"
+
+media_staging_path: "C:/Games/bulart/media_staging"
+
+# Лимиты
+max_parallel: 1
+max_queue: 5
+
+capabilities:
+  - heavy_transcription
+  - light_transcription
+  - summarization
+  - pdf_ocr
+
+# Heartbeat
+heartbeat_interval_seconds: 25
+
+# Transcription
+transcription:
+  engine: faster-whisper
+  device: auto
+  compute_type: auto
+  model_low_load: small
+  model_high_load: base
+  low_load_cpu_max: 50
+  low_load_ram_min_gb: 3.0
+
+# LLM
+llm:
+  provider: ollama
+  base_url: "http://localhost:11434"
+  model: "qwen2.5:7b"
+  fallback_model: "qwen2.5:3b"
+  timeout_seconds: 120
+
+# Syncthing wait
+syncthing_wait_poll_seconds: 5
+syncthing_wait_timeout_seconds: 300

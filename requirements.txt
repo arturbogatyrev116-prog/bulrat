@@ -1,0 +1,23 @@
+# Coordinator (VPS)
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+pyyaml>=6.0
+httpx>=0.27.0
+jinja2>=3.1.4
+trafilatura>=1.9.0
+yt-dlp>=2024.1.1
+PyMuPDF>=1.24.0          # PDF extraction
+
+# Office document extraction (VPS triage)
+python-docx>=1.1.0       # .docx / .doc
+python-pptx>=0.6.23      # .pptx / .ppt
+openpyxl>=3.1.2          # .xlsx / .xls
+ebooklib>=0.18           # .epub
+# RTF и ODF читаются как plain text (без доп. зависимостей)
+
+# Telegram Bot (VPS)
+aiogram>=3.10.0
+
+# Both (coordinator + optional on worker)
+aiofiles>=23.2.1

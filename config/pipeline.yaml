@@ -1,0 +1,120 @@
+##
+## Bulart Pipeline — основной конфиг
+##
+
+# Coordinator
+coordinator_url: "http://100.x.x.x:8080"    # Tailscale IP VPS
+api_key: "change-me-secret"
+
+# Очередь
+lease_duration_minutes: 10
+max_attempts: 3
+
+# Vault
+vault_path: "../Vault"
+media_staging_path: "../media_staging"
+
+# Маршрутизация задач по capabilities
+routing:
+  heavy_transcription:
+    preferred: [desktop, laptop]
+  light_transcription:
+    preferred: [desktop, laptop]
+  summarization:
+    preferred: [desktop, laptop]
+  pdf_ocr:
+    preferred: [desktop]
+  office_document:
+    preferred: [desktop, laptop]
+  article_extraction:
+    preferred: [vps]
+  youtube_triage:
+    preferred: [vps]
+
+# Конфиги worker'ов (для диспетчера)
+workers:
+  desktop:
+    priority: 100
+    max_parallel: 1
+    max_queue: 5
+    capabilities:
+      - heavy_transcription
+      - light_transcription
+      - summarization
+      - pdf_ocr
+      - office_document
+
+  laptop:
+    priority: 50
+    max_parallel: 1
+    max_queue: 3
+    capabilities:
+      - light_transcription
+      - summarization
+      - office_document
+
+  vps:
+    priority: 10
+    max_parallel: 2
+    max_queue: 20
+    capabilities:
+      - article_extraction
+      - youtube_triage
+
+# Транскрибация
+transcription:
+  engine: faster-whisper
+  device: auto                 # auto | cpu | cuda
+  compute_type: auto           # auto | int8 | float16
+  # Выбор модели по нагрузке (worker сам решает)
+  model_low_load: small        # cpu < threshold и ram > threshold
+  model_high_load: base
+  model_on_battery: base
+  low_load_cpu_max: 50         # %
+  low_load_ram_min_gb: 3.0
+  # Чанки для длинных видео (> 1 часа)
+  chunk_long_audio: true
+  chunk_duration_minutes: 30
+
+# LLM суммаризация
+llm:
+  provider: ollama
+  base_url: "http://localhost:11434"
+  model: "qwen2.5:7b"
+  fallback_model: "qwen2.5:3b"
+  timeout_seconds: 120
+  # Облачный fallback (по умолчанию выключен)
+  cloud_fallback:
+    enabled: false
+    provider: openai
+    model: gpt-4o-mini
+    api_key_env: OPENAI_API_KEY
+
+# Промпты
+prompts_dir: "config/prompts"
+prompt_map:
+  youtube: "youtube.md"
+  article: "article.md"
+  twitter: "article.md"
+  reddit: "article.md"
+  arxiv: "scientific.md"
+  voice: "generic.md"
+  video: "meeting.md"
+  pdf: "scientific.md"
+  word: "office_document.md"
+  powerpoint: "office_document.md"
+  excel: "office_document.md"
+  odf: "office_document.md"
+  rtf: "office_document.md"
+  epub: "article.md"
+  text: "generic.md"
+
+# Качество (влияет на выбор worker'а)
+# high = ждать desktop; degraded = обработать на любом доступном
+quality_mode: high
+
+# Dead letter
+failed_vault_dir: "0-Inbox/Failed"
+
+# Очистка медиафайлов
+media_cleanup_days: 7

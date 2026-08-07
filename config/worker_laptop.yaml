@@ -1,0 +1,43 @@
+##
+## Worker config — Laptop (fallback)
+##
+
+worker_id: laptop
+coordinator_url: "http://100.x.x.x:8080"    # Tailscale IP VPS
+api_key: "change-me-secret"
+
+media_staging_path: "/home/user/bulart/media_staging"  # путь на ноутбуке
+
+# Лимиты — жёсткие
+max_parallel: 1
+max_queue: 3
+
+capabilities:
+  - light_transcription
+  - summarization
+
+# Heartbeat
+heartbeat_interval_seconds: 25
+
+# Transcription — только лёгкие модели
+transcription:
+  engine: faster-whisper
+  device: cpu
+  compute_type: int8
+  model_low_load: small
+  model_high_load: base
+  model_on_battery: base         # при работе от батареи — всегда base
+  low_load_cpu_max: 40           # более строгий порог
+  low_load_ram_min_gb: 2.0
+
+# LLM
+llm:
+  provider: ollama
+  base_url: "http://localhost:11434"
+  model: "qwen2.5:3b"            # лёгкая модель
+  fallback_model: "qwen2.5:3b"
+  timeout_seconds: 180
+
+# Syncthing wait
+syncthing_wait_poll_seconds: 5
+syncthing_wait_timeout_seconds: 600   # больше времени на доставку

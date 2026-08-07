@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Bulart Dashboard</title>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding: 16px; }
+h1 { color: #fff; margin-bottom: 16px; font-size: 18px; }
+h2 { color: #aaa; font-size: 14px; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { background: #2a2a2a; border: 1px solid #333; border-radius: 6px; padding: 12px; }
+.worker { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.online { background: #4caf50; }
+.offline { background: #f44336; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: #333; color: #aaa; padding: 6px 8px; text-align: left; }
+td { padding: 6px 8px; border-bottom: 1px solid #2a2a2a; }
+tr:hover td { background: #2f2f2f; }
+.status-new { color: #64b5f6; }
+.status-triage { color: #ba68c8; }
+.status-assigned { color: #fff176; }
+.status-processing { color: #ffb74d; }
+.status-done { color: #81c784; }
+.status-failed { color: #e57373; }
+.btn { padding: 3px 8px; border: 1px solid #555; background: #333; color: #ddd; cursor: pointer; border-radius: 3px; font-family: monospace; font-size: 11px; }
+.btn:hover { background: #444; }
+</style>
+</head>
+<body hx-headers='{"X-Api-Key": ""}'>
+<h1>Bulart Coordinator</h1>
+
+<div class="grid">
+  <div class="card">
+    <h2>Workers</h2>
+    {% for w in workers %}
+    <div class="worker">
+      <span class="dot {% if w.online %}online{% else %}offline{% endif %}"></span>
+      <strong>{{ w.worker_id }}</strong>
+      {% if w.online %}
+        CPU {{ "%.0f"|format(w.cpu_load) }}%
+        RAM {{ "%.1f"|format(w.ram_free_gb) }}GB free
+        tasks: {{ w.active_tasks }}/{{ w.max_parallel }}
+        {% if w.on_battery %} 🔋{% endif %}
+      {% else %}
+        <span style="color:#666">offline</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if not workers %}<div style="color:#666">No workers registered</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Queue Summary</h2>
+    <div>Total tasks: {{ total }}</div>
+  </div>
+</div>
+
+<h2>Tasks</h2>
+<div class="card">
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>Type</th><th>Status</th><th>Worker</th><th>Priority</th><th>Attempts</th><th>Created</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for task in tasks %}
+  <tr>
+    <td>{{ task.task_id }}</td>
+    <td>{{ task.type }}</td>
+    <td class="status-{{ task.status }}">{{ task.status }}</td>
+    <td>{{ task.assigned_to or "—" }}</td>
+    <td>{{ task.priority }}</td>
+    <td>{{ task.attempts }}</td>
+    <td>{{ task.created_at[:16] if task.created_at else "" }}</td>
+    <td>
+      {% if task.status == "failed" %}
+      <button class="btn"
+        hx-post="/tasks/{{ task.task_id }}/retry"
+        hx-headers='{"X-Api-Key": "{{ request.query_params.get("key","") }}"}'
+        hx-confirm="Retry task {{ task.task_id }}?"
+        hx-target="closest tr">retry</button>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  {% if not tasks %}<tr><td colspan="8" style="color:#666;text-align:center">Empty queue</td></tr>{% endif %}
+  </tbody>
+</table>
+</div>
+
+<script>
+// Auto-refresh every 15 seconds
+setInterval(() => location.reload(), 15000);
+</script>
+</body>
+</html>

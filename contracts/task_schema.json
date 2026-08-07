@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "bulart/task",
+  "title": "Task",
+  "type": "object",
+  "required": ["task_id", "type", "status", "payload", "created_at"],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Unique ID: YYYYmmdd_HHMMSS_<type_prefix>_<6char_hex>",
+      "example": "20250801_153042_yt_a1b2c3"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "youtube", "article", "twitter", "reddit", "arxiv",
+        "voice", "video", "pdf",
+        "word", "powerpoint", "excel", "odf", "rtf", "epub",
+        "text"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["new", "triage", "assigned", "processing", "done", "failed"]
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "title": "URL payload",
+          "description": "For: youtube, article, twitter, reddit, arxiv",
+          "type": "object",
+          "required": ["url"],
+          "properties": {
+            "url": {"type": "string", "format": "uri"},
+            "title": {"type": "string"}
+          }
+        },
+        {
+          "title": "File payload",
+          "description": "For: voice, video, pdf",
+          "type": "object",
+          "required": ["file_path"],
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "description": "Relative path inside media_staging/"
+            },
+            "original_filename": {"type": "string"},
+            "duration_seconds": {"type": "number"}
+          }
+        },
+        {
+          "title": "Text payload",
+          "description": "For: text",
+          "type": "object",
+          "required": ["text"],
+          "properties": {
+            "text": {"type": "string", "minLength": 1},
+            "title": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 50
+    },
+    "source": {
+      "type": "string",
+      "enum": ["telegram", "obsidian", "cli", "web", "api"],
+      "description": "Where the task originated"
+    },
+    "required_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "heavy_transcription",
+          "light_transcription",
+          "summarization",
+          "pdf_ocr",
+          "office_document",
+          "article_extraction",
+          "youtube_triage"
+        ]
+      },
+      "description": "Set by triage; worker must have all of these"
+    },
+    "triage_data": {
+      "type": "object",
+      "description": "Additional data produced by VPS triage step",
+      "properties": {
+        "subtitles_available": {"type": "boolean"},
+        "subtitles_text": {"type": "string"},
+        "duration_seconds": {"type": "number"},
+        "language": {"type": "string"},
+        "article_text": {"type": "string"},
+        "article_title": {"type": "string"},
+        "pdf_text": {"type": "string"},
+        "needs_ocr": {"type": "boolean"}
+      }
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "triaged_at": {"type": ["string", "null"], "format": "date-time"},
+    "assigned_to": {"type": ["string", "null"]},
+    "assigned_at": {"type": ["string", "null"], "format": "date-time"},
+    "lease_until": {"type": ["string", "null"], "format": "date-time"},
+    "completed_at": {"type": ["string", "null"], "format": "date-time"},
+    "attempts": {"type": "integer", "minimum": 0, "default": 0},
+    "last_error": {"type": ["string", "null"]},
+    "result": {
+      "type": ["object", "null"],
+      "description": "Filled by coordinator after worker POSTs /done",
+      "properties": {
+        "title": {"type": "string"},
+        "summary": {
+          "type": "object",
+          "required": ["brief"],
+          "properties": {
+            "brief": {"type": "string"},
+            "ideas": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "actions": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        },
+        "transcript": {"type": "string"},
+        "chapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["time", "title"],
+            "properties": {
+              "time": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "method": {"type": "string", "description": "e.g. whisper:small, subtitles, trafilatura"},
+            "language": {"type": "string"},
+            "duration_seconds": {"type": "number"},
+            "word_count": {"type": "integer"}
+          }
+        },
+        "note_path": {
+          "type": "string",
+          "description": "Relative path in vault, set by vault_writer"
+        }
+      }
+    }
+  }
+}

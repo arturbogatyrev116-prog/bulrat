@@ -1,0 +1,14 @@
+faster-whisper
+aiohttp
+psutil
+PyYAML
+PyMuPDF
+pdf2image
+pytesseract
+Pillow
+pydub
+ffmpeg-python
+pytest
+pytest-asyncio
+python-docx
+firecrawl-anydoc>=0.1.6

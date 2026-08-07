@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.env
+.venv/
+venv/
+
+# Database (don't commit the live db)
+coordinator.db
+coordinator.db-wal
+coordinator.db-shm
+
+# Media files — synced via Syncthing, not Git
+media_staging/
+
+# Vault — отдельный git-репо, не включать в code-репо
+Vault/
+
+# Logs
+*.log
+logs/
